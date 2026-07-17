@@ -1,14 +1,27 @@
 '''大模型特征工程，提取要进行tts的文本和语种'''
 from typing import List, Dict
-from client.clientfactory import Clientfactory
+from client.clientfactory import client_broker
 
-_GENERATE_AUDIO_PROMPT_ = (
+audio_extract_prompt = (
     "请从上述对话中帮我提取出即将要转成语音的文本，不要包含提示文字"
 )
 
 
+#extract_text函数是调用大模型，提取用户输入和AI的回答中的文本
+def pull_text(question: str, history: List[List | None] | None = None) -> str:
+    messages = __build_messages(question, history or [])
+    result = client_broker().get_default().chat_messages(messages)
+
+    return result
+#     为什么必须要有这个步骤？
+# 如果直接把大模型的原始回答传给 TTS，会出现严重问题：
+# 大模型回答里的JSON、代码块、HTML标签、图片URL都会被 TTS 读出来，变成乱码语音
+# 比如大模型返回{"title": "报告"}，直接传给 TTS 会读成：左大括号 引号 title 引号 冒号... 完全没法听
+# 这个步骤就是让大模型把所有格式、标记、多余内容都去掉，只输出正常人说话的纯文本，TTS 生成的语音才正常。
+
+
 #construct_messages函数是告诉大模型，你需要根据用户输入和AI的回答，正确提取出信息，无需包含提示文字
-def __construct_messages(
+def __build_messages(
     question: str, history: List[List | None]
 ) -> List[Dict[str, str]]:
     messages = [
@@ -24,27 +37,33 @@ def __construct_messages(
 
 #question是用户输入，告诉大模型，你需要根据用户输入和AI的回答，正确提取出信息，无需包含提示文字
     messages.append({"role": "user", "content": question})
-#_GENERATE_AUDIO_PROMPT_是大模型的提示，告诉大模型，你需要根据用户输入和AI的回答，正确提取出信息，无需包含提示文字
-    messages.append({"role": "user", "content": _GENERATE_AUDIO_PROMPT_})
+#audio_extract_prompt是大模型的提示，告诉大模型，你需要根据用户输入和AI的回答，正确提取出信息，无需包含提示文字
+    messages.append({"role": "user", "content": audio_extract_prompt})
 
     return messages
 
 
-#extract_text函数是调用大模型，提取用户输入和AI的回答中的文本
-def extract_text(question: str, history: List[List | None] | None = None) -> str:
-    messages = __construct_messages(question, history or [])
-    result = Clientfactory().get_client().chat_using_messages(messages)
+#extract_gender函数是调用大模型，提取用户输入和AI的回答中的声音性别
+def detect_gender(text: str) -> str:
+    messages = [
+        {
+            "role": "system",
+            "content": "你现在扮演信息抽取的角色，要求根据用户输入和AI的回答，正确提取出信息，不要复述，无需包含提示文字",
+        },
+        {
+            "role": "user",
+            "content": f"请从如下文本中提取出文本转语音的声音性别，提取的结果只有两种可能，男声和女声，如果如下文本不包含声音性别，"
+            f"直接返回一个字：无。（注意：结果中不要包含任何符号和提示信息）：\n{text}",
+        },
+    ]
+
+    result = client_broker().get_default().chat_messages(messages)
 
     return result
-#     为什么必须要有这个步骤？
-# 如果直接把大模型的原始回答传给 TTS，会出现严重问题：
-# 大模型回答里的JSON、代码块、HTML标签、图片URL都会被 TTS 读出来，变成乱码语音
-# 比如大模型返回{"title": "报告"}，直接传给 TTS 会读成：左大括号 引号 title 引号 冒号... 完全没法听
-# 这个步骤就是让大模型把所有格式、标记、多余内容都去掉，只输出正常人说话的纯文本，TTS 生成的语音才正常。
 
 
 #extract_language函数是调用大模型，提取用户输入和AI的回答中的语种
-def extract_language(text: str) -> str:
+def detect_lang(text: str) -> str:
     messages = [
         {
             "role": "system",
@@ -60,11 +79,11 @@ def extract_language(text: str) -> str:
             """,
         },
     ]
-    result = Clientfactory().get_client().chat_using_messages(messages)
+    result = client_broker().get_default().chat_messages(messages)
     return result
 
 
-def get_tts_model_name(lang: str, gender: str) -> str:
+def pick_voice(lang: str, gender: str) -> str:
     if lang == "无" and (gender == "无" or gender == "男声"):
         return "zh-CN-YunxiNeural", True  # 返回普通话男声
 
@@ -90,21 +109,3 @@ def get_tts_model_name(lang: str, gender: str) -> str:
         return "zh-TW-HsiaoChenNeural", True  # 返回台湾话女声
 
     return "zh-CN-YunxiNeural", False  # 可设置一个默认返回值，防止未匹配的情况
-
-
-def extract_gender(text: str) -> str:
-    messages = [
-        {
-            "role": "system",
-            "content": "你现在扮演信息抽取的角色，要求根据用户输入和AI的回答，正确提取出信息，不要复述，无需包含提示文字",
-        },
-        {
-            "role": "user",
-            "content": f"请从如下文本中提取出文本转语音的声音性别，提取的结果只有两种可能，男声和女声，如果如下文本不包含声音性别，"
-            f"直接返回一个字：无。（注意：结果中不要包含任何符号和提示信息）：\n{text}",
-        },
-    ]
-
-    result = Clientfactory().get_client().chat_using_messages(messages)
-
-    return result

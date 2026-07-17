@@ -1,9 +1,9 @@
 '''联网搜索的RAG检索模型类'''
-from model.model_base import Modelbase
-from model.model_base import ModelStatus
+from model.model_base import base_model
+from model.model_base import model_state
 
 import os
-from env import get_app_root
+from env import app_root
 
 #ModelScopeEmbeddings 模型用于将文本转换为向量表示，用于相似度计算
 from langchain_community.embeddings import ModelScopeEmbeddings
@@ -13,10 +13,10 @@ from langchain_community.document_loaders import DirectoryLoader, MHTMLLoader, U
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores.faiss import FAISS
 
-from config.config import Config
+from config.config import config_manager
 
 # 检索模型
-class InternetModel(Modelbase):
+class web_indexer(base_model):
     
     _retriever: VectorStoreRetriever
 
@@ -24,17 +24,22 @@ class InternetModel(Modelbase):
         super().__init__(*args,**krgs)
 
         # 此处请自行改成下载embedding模型的位置
-        self._embedding_model_path =Config.get_instance().get_with_nested_params("model", "embedding", "model-name")
+        self._embedding_model_path =config_manager.instance().nested_get("model", "embedding", "model-name")
         self._text_splitter = RecursiveCharacterTextSplitter
         #self._embedding = OpenAIEmbeddings()
         #model_id 是ModelScopre平台上模型唯一标识，告诉程序去下载那个向量模型(可以是路径也可以是模型名称)
         self._embedding = ModelScopeEmbeddings(model_id=self._embedding_model_path)
-        self._data_path = os.path.join(get_app_root(), "data/cache/internet")
+        self._data_path = os.path.join(app_root(), "data/cache/internet")
         
         #self._logger: Logger = Logger("rag_retriever")
 
+    @property
+    def retriever(self)-> VectorStoreRetriever:
+        self.build_index()
+        return self._retriever
+
     # 建立向量库
-    def build(self):
+    def build_index(self):
         # 加载html文件
         html_loader = DirectoryLoader(
             self._data_path, glob="**/*.html",
@@ -65,9 +70,4 @@ class InternetModel(Modelbase):
         
 
         
-    @property
-    def retriever(self)-> VectorStoreRetriever:
-        self.build()
-        return self._retriever
-
-INSTANCE = InternetModel()
+singleton = web_indexer()

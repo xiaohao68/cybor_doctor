@@ -1,13 +1,21 @@
 '''大模型特征工程，提取搜索关键词'''
 from typing import List, Dict
-from client.clientfactory import Clientfactory
+from client.clientfactory import client_broker
 
-_GENERATE_Internet_PROMPT_ = (
+web_keyword_prompt = (
     "请根据用户的提问，提取出一个可以在搜索引擎上搜索的问题（不要有多余的内容）"
 )
 
 
-def __construct_messages(
+#extract_keywords-提取用户关键词，用于搜索引擎搜索,
+# 返回的是一个字符串，包含多个问题，每个问题之间用分号隔开
+def extract_keywords(question: str, history: List[List | None] | None = None) -> str:
+    messages = __build_messages(question, history or [])
+    result = client_broker().get_default().chat_messages(messages)
+
+    return result
+
+def __build_messages(
     question: str, history: List[List | None]
 ) -> List[Dict[str, str]]:
     messages = [
@@ -19,14 +27,6 @@ def __construct_messages(
     ]
 
     messages.append({"role": "user", "content": f"用户提问：{question}"})
-    messages.append({"role": "user", "content": _GENERATE_Internet_PROMPT_})
+    messages.append({"role": "user", "content": web_keyword_prompt})
 
     return messages
-
-#extract_question-提取用户关键词，用于搜索引擎搜索,
-# 返回的是一个字符串，包含多个问题，每个问题之间用分号隔开
-def extract_question(question: str, history: List[List | None] | None = None) -> str:
-    messages = __construct_messages(question, history or [])
-    result = Clientfactory().get_client().chat_using_messages(messages)
-
-    return result

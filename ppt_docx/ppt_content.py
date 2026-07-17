@@ -3,10 +3,10 @@ import json
 from typing import List, Dict
 import re
 
-from client.clientfactory import Clientfactory
+from client.clientfactory import client_broker
 
 # 输出格式
-__output_format = json.dumps({
+__ppt_schema = json.dumps({
     "title": "example title",   #总标题
     "pages": [                  #每个页面的内容
         {
@@ -43,9 +43,9 @@ __output_format = json.dumps({
 }, ensure_ascii=True)#ensure_ascii=True保证中文不会被转为utf-8编码的字符串
 
 # 生成ppt的详细内容
-_GENERATE_PPT_PROMPT_ = f'''请你根据用户要求生成ppt的详细内容，不要省略。按这个JSON格式输出{__output_format}，只能返回JSON，且JSON不要用```包裹，不要返回markdown格式'''
+ppt_prompt = f'''请你根据用户要求生成ppt的详细内容，不要省略。按这个JSON格式输出{__ppt_schema}，只能返回JSON，且JSON不要用```包裹，不要返回markdown格式'''
 
-def __construct_messages(question: str, history: List[List | None]) -> List[Dict[str, str]]:
+def __build_messages(question: str, history: List[List | None]) -> List[Dict[str, str]]:
     messages = [
         {"role": "system",
          "content": "你现在扮演信息抽取的角色，要求根据用户输入和AI的回答，正确提取出信息。"}]
@@ -54,17 +54,17 @@ def __construct_messages(question: str, history: List[List | None]) -> List[Dict
         messages.append({"role": "user", "content": user_input})
         messages.append(
             {"role": "assistant", "content": repr(ai_response)})
-    messages.append({"role": "system", "content": _GENERATE_PPT_PROMPT_})
+    messages.append({"role": "system", "content": ppt_prompt})
     messages.append({"role": "user", "content": question})
 
     return messages
 
 #生成ppt的文字内容，并对格式进行检查修改
-def generate_ppt_content(question: str,
+def build_ppt_json(question: str,
                          history: List[List | None] | None = None) -> str:
-    messages = __construct_messages(question, history or [])
+    messages = __build_messages(question, history or [])
     print(messages)
-    result = Clientfactory().get_client().chat_using_messages(messages)
+    result = client_broker().get_default().chat_messages(messages)
     print(result)
     print(type(result))
 #re.sub(正则匹配，替换值，原字符串)函数用于替换字符串中的模式匹配部分
@@ -85,8 +85,3 @@ def generate_ppt_content(question: str,
         total_result = result[:index_of_last + 1] + '}]}]}'
         print(total_result)
         return total_result
-
-
-
-
-

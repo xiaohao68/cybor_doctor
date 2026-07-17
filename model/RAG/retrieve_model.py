@@ -1,8 +1,8 @@
 '''本地知识库的RAG检索模型类'''
-from model.model_base import Modelbase
-from model.model_base import ModelStatus
-from config.config import Config
-from env import get_app_root
+from model.model_base import base_model
+from model.model_base import model_state
+from config.config import config_manager
+from env import app_root
 
 import os
 import shutil
@@ -45,7 +45,7 @@ from langchain_community.vectorstores.faiss import FAISS
 
 
 # 检索模型
-class Retrievemodel(Modelbase):
+class kb_indexer(base_model):
 
     _retriever: VectorStoreRetriever
 
@@ -53,10 +53,10 @@ class Retrievemodel(Modelbase):
         super().__init__(*args, **krgs)
 
         # 此处请自行改成下载embedding模型的位置
-        self._embedding_download_path = Config.get_instance().get_with_nested_params(
+        self._embedding_download_path = config_manager.instance().nested_get(
             "model", "embedding", "model-path"
         )
-        self._embedding_model_name = Config.get_instance().get_with_nested_params(
+        self._embedding_model_name = config_manager.instance().nested_get(
             "model", "embedding", "model-name"
         )
         self._embedding_model_path = os.path.join(
@@ -80,7 +80,7 @@ class Retrievemodel(Modelbase):
         self._text_splitter = RecursiveCharacterTextSplitter
         # self._embedding = OpenAIEmbeddings()
         self._embedding = ModelScopeEmbeddings(model_id=self._embedding_model_path)
-        self._data_path = Config.get_instance().get_with_nested_params(
+        self._data_path = config_manager.instance().nested_get(
             "Knowledge-base-path"
         )
         if not os.path.exists(self._data_path):
@@ -88,8 +88,16 @@ class Retrievemodel(Modelbase):
         self._user_retrievers = {}
 
 
+    @property
+    def retriever(self) -> VectorStoreRetriever:
+        if self._model_status == model_state.failed:
+            self.build_index()
+            return self._retriever
+        else:
+            return self._retriever
+
     # 建立向量库
-    def build(self):
+    def build_index(self):
 
         # 加载PDF文件
         pdf_loader = DirectoryLoader(
@@ -191,17 +199,13 @@ class Retrievemodel(Modelbase):
         self._retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
 
         # 设置模型状态为 BUILDING
-        self._model_status = ModelStatus.BUILDING
+        self._model_status = model_state.building
 
-    @property
-    def retriever(self) -> VectorStoreRetriever:
-        if self._model_status == ModelStatus.FAILED:
-            self.build()
-            return self._retriever
-        else:
-            return self._retriever
+    def get_user_store(self) -> VectorStoreRetriever:
+        """获取用户的retriever，如果不存在则返回None"""
+        return self._user_retrievers.get(self.user_id, None)
 
-    def build_user_vector_store(self):
+    def build_user_store(self):
         """根据用户的ID加载用户文件夹中的文件并为用户构建向量库"""
         user_data_path = os.path.join("user_data", self.user_id)  # 用户独立文件夹
         if not os.path.exists(user_data_path):
@@ -324,23 +328,7 @@ class Retrievemodel(Modelbase):
         except Exception as e:
             print(f"构建用户 {self.user_id} 向量库时出错: {e}")
 
-    def get_user_retriever(self) -> VectorStoreRetriever:
-        """获取用户的retriever，如果不存在则返回None"""
-        return self._user_retrievers.get(self.user_id, None)
-
-    def upload_user_file(self, file):
-        """将用户上传的文件存储到用户的文件夹中"""
-        user_data_path = os.path.join("user_data", self.user_id)
-        os.makedirs(user_data_path, exist_ok=True)  # 确保用户文件夹存在
-
-        file_path = os.path.join(user_data_path, file.name)
-        with open(file_path, "wb") as f:
-            f.write(file.read())
-
-        print(f"文件 {file.name} 已成功上传到用户 {self.user_id} 的文件夹")
-
-    # 展示用户已上传的文件
-    def list_uploaded_files(self):
+    def show_user_files(self):
         """展示用户文件夹中已经上传的文件"""
         user_data_path = os.path.join("user_data", self.user_id)
         if not os.path.exists(user_data_path):
@@ -357,8 +345,32 @@ class Retrievemodel(Modelbase):
 
         return files
 
+    def add_user_file(self, file):
+        """将用户上传的文件存储到用户的文件夹中"""
+        user_data_path = os.path.join("user_data", self.user_id)
+        os.makedirs(user_data_path, exist_ok=True)  # 确保用户文件夹存在
+
+        file_path = os.path.join(user_data_path, file.name)
+        with open(file_path, "wb") as f:
+            f.write(file.read())
+
+        print(f"文件 {file.name} 已成功上传到用户 {self.user_id} 的文件夹")
+
+    def read_user_file(self, filename):
+        """根据文件名返回用户文件的路径"""
+        user_data_path = os.path.join("user_data", self.user_id)  # 定义用户文件夹路径
+        file_path = os.path.join(user_data_path, filename)  # 拼接完整的文件路径
+
+        if not os.path.exists(file_path):
+            print(f"文件 {filename} 不存在")
+            return None
+
+        # 文件存在时返回文件的完整路径
+        print(f"文件 {filename} 路径已成功获取")
+        return file_path
+
     # 删除指定文件或清空用户文件夹
-    def delete_uploaded_file(self, filename=None):
+    def remove_user_file(self, filename=None):
         """删除用户文件夹中的指定文件，或清空文件夹"""
         user_data_path = os.path.join("user_data", self.user_id)
         if not os.path.exists(user_data_path):
@@ -379,18 +391,5 @@ class Retrievemodel(Modelbase):
                 os.remove(file_path)
             print(f"用户 {self.user_id} 文件夹已清空")
 
-    def view_uploaded_file(self, filename):
-        """根据文件名返回用户文件的路径"""
-        user_data_path = os.path.join("user_data", self.user_id)  # 定义用户文件夹路径
-        file_path = os.path.join(user_data_path, filename)  # 拼接完整的文件路径
 
-        if not os.path.exists(file_path):
-            print(f"文件 {filename} 不存在")
-            return None
-
-        # 文件存在时返回文件的完整路径
-        print(f"文件 {filename} 路径已成功获取")
-        return file_path
-
-
-INSTANCE = Retrievemodel()
+singleton = kb_indexer()

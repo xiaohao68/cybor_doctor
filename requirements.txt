@@ -23,8 +23,6 @@ simplejson==3.19.3
 sortedcontainers==2.4.0
 transformers==4.45.2
 edge-tts>=7.0.0
-pyahocorasick==2.1.0
-py2neo==2021.2.4
 PyPDF2==3.0.1
 SpeechRecognition==3.10.4
 opencc-python-reimplemented==0.1.7

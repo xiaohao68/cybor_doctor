@@ -3,10 +3,10 @@ from rag.retrieve.retrieve_document import retrieve_docs       # 文档检索函
 from typing import List                                        # 类型提示
 from openai import Stream                                      # 流式响应类型
 from openai.types.chat import ChatCompletionChunk              # 聊天完成块类型
-from client.clientfactory import Clientfactory                 # 客户端工厂
+from client.clientfactory import client_broker                 # 客户端工厂
 
 
-def invoke(question: str, history: List[List]) -> Stream[ChatCompletionChunk]:
+def run(question: str, history: List[List]) -> Stream[ChatCompletionChunk]:
     """
     RAG检索增强生成主入口
     
@@ -33,6 +33,6 @@ def invoke(question: str, history: List[List]) -> Stream[ChatCompletionChunk]:
     prompt = f"请根据搜索到的文件信息\n{_context}\n 回答问题：\n{question}"
     
     # 调用LLM进行流式回答
-    response = Clientfactory().get_client().chat_with_ai_stream(prompt)
+    response = client_broker().get_default().ask_model_stream(prompt)
 
     return response

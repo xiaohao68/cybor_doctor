@@ -2,20 +2,20 @@
 import os                                                         # 操作系统接口
 import asyncio                                                     # 异步编程支持
 
-from env import get_app_root                                       # 获取应用根目录
+from env import app_root                                          # 获取应用根目录
 import hashlib                                                    # 哈希算法
 import edge_tts                                                   # Edge-TTS库
 
 
 # 音频文件保存目录
-_OUTPUT_DIR = os.path.join(get_app_root(), "data/cache/audio")
+audio_cache_dir = os.path.join(app_root(), "data/cache/audio")
 
 # 如果目录不存在，先创建
-if not os.path.exists(_OUTPUT_DIR):
-    os.makedirs(_OUTPUT_DIR)
+if not os.path.exists(audio_cache_dir):
+    os.makedirs(audio_cache_dir)
 
 
-def get_file_path(text):
+def make_path(text):
     """
     根据文本内容生成唯一的文件名（使用SHA256哈希）
     
@@ -27,10 +27,10 @@ def get_file_path(text):
     """
     # 使用SHA256哈希生成唯一文件名
     file_name = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    return os.path.join(_OUTPUT_DIR, f"{file_name}.mp3")
+    return os.path.join(audio_cache_dir, f"{file_name}.mp3")
 
 
-def audio_generate(text: str, model_name: str) -> str:
+def synthesize(text: str, model_name: str) -> str:
     """
     将文本转换为语音（使用Edge-TTS）
     
@@ -47,10 +47,10 @@ def audio_generate(text: str, model_name: str) -> str:
         str: 生成的音频文件路径
     """
     # 生成输出文件路径
-    _output_file = get_file_path(text)
+    _output_file = make_path(text)
 
     # 异步生成函数
-    async def _generating() -> None:
+    async def _run() -> None:
         import edge_tts  # Edge-TTS库
         # 创建Edge-TTS通信对象
         communicate = edge_tts.Communicate(text, model_name)
@@ -58,7 +58,7 @@ def audio_generate(text: str, model_name: str) -> str:
         await communicate.save(_output_file)
 
     # 执行异步任务
-    asyncio.run(_generating())
+    asyncio.run(_run())
 
     return _output_file
 

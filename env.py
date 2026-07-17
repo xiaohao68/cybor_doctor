@@ -9,17 +9,7 @@ load_dotenv(".env", override=False)
 print(f"setting environment variables: {dotenv_values('.env')}")   # 打印加载的环境变量
 
 
-def get_app_root():
-    """
-    获取应用程序根目录
-    
-    返回:
-        str: 当前工作目录路径
-    """
-    return os.getcwd()
-
-
-def get_env_value(key):
+def env_value(key):
     """
     获取环境变量值
     
@@ -32,8 +22,18 @@ def get_env_value(key):
     return os.environ.get(key)
 
 
+def app_root():
+    """
+    获取应用程序根目录
+    
+    返回:
+        str: 当前工作目录路径
+    """
+    return os.getcwd()
+
+
 # 测试入口
 if __name__ == '__main__':
-    print("app root is: " + get_app_root())
-    print("your API key is: " + get_env_value('LLM_API_KEY'))
-    print("your url is: " + get_env_value('MODEL_NAME'))
+    print("app root is: " + app_root())
+    print("your API key is: " + env_value('LLM_API_KEY'))
+    print("your url is: " + env_value('MODEL_NAME'))

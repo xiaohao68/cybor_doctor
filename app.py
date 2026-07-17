@@ -1,8 +1,9 @@
-from qa.answer import get_answer                                                      # 答案获取入口函数
-from qa.question_parser import parse_question                                          # 问题类型解析函数
-from qa.function_tool import process_image_describe_tool                               # 图片描述处理工具
-from qa.purpose_type import userPurposeType                                            # 用户意图类型枚举
-from audio.audio_generate import audio_generate                                        # 音频生成函数
+from qa.answer import fetch_answer                                                      # 答案获取入口函数
+from qa.question_parser import detect_intent                                            # 问题类型解析函数
+from qa.function_tool import handle_image_desc                                          # 图片描述处理工具
+from qa.function_tool import handle_image_gen                                           # 图片生成处理工具
+from qa.purpose_type import intent_type                                                 # 用户意图类型枚举
+from audio.audio_generate import synthesize                                             # 音频生成函数
 
 import gradio as gr                                                                   # Gradio界面框架
 from icecream import ic                                                               # 调试工具
@@ -12,6 +13,66 @@ import os                                                                       
 AVATAR = ("resource/user.png", "resource/bot.jpg")
 # 设置环境变量，解决KMP库重复问题
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
+
+# ============ 文档内容提取工具 ============
+
+def pdf_to_str(pdf_file):
+    """从PDF文件中提取文本内容"""
+    import PyPDF2
+    # PDF解析库   
+    reader = PyPDF2.PdfReader(pdf_file)                                                # 创建PDF读取器
+    text = ""
+    #reader.pages：返回PDF文件的所有页面对象
+    for page in reader.pages:
+        # 遍历每一页 extract_text()方法从当前页面提取文本内容
+        #page.extract_text()：从当前页面提取文本内容
+        text += page.extract_text()                                                    # 提取文本
+    return text
+
+
+def docx_to_str(file_path):
+    """从DOCX文件中提取文本内容"""
+    from docx import Document                                                             # DOCX文档处理
+    doc = Document(file_path)                                                          # 打开DOCX文档
+    text = []
+    for paragraph in doc.paragraphs:                                                   # 遍历每个段落
+        text.append(paragraph.text)                                                     # 收集段落文本
+    return "\n".join(text)                                                             # 拼接为完整文本
+
+
+def text_file_to_str(text_file):
+    """从文本文件中提取内容（自动检测编码）"""
+    # 字符编码检测库
+    import chardet                                                                        
+    with open(text_file, "rb") as file:
+        raw_data = file.read() # 读取原始字节
+        # 检测编码格式  返回一个字典，包含编码类型和置信度信息
+        result = chardet.detect(raw_data)                                               
+        encoding = result["encoding"]
+
+    # 使用检测到的编码读取文件
+    with open(text_file, "r", encoding=encoding) as file:
+        return file.read()
+
+
+# ============ 图片 / 音频处理工具 ============
+
+def image_to_base64(image_path):
+    import base64  # Base64编码模块，用于图片处理
+
+    """将图片文件转换为Base64编码字符串"""
+    with open(image_path, "rb") as image_file:
+        #base64.b64encode()方法将二进制数据编码为Base64字符串
+        #就是将二进制字节转换成base64格式的字节
+        # .decode()方法将Base64字节通过UTF-8编码转换成Base64字符串
+        encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+        return encoded_string
+# # 传入的是网络收到的 Base64 字符串
+# # 第一步先 encode 转回 Base64 字节
+# b64_byte_data = base64_str.encode("utf-8")
+# # 第二步 b64decode 把 Base64 字节还原成图片原始二进制
+# origin_image_bytes = base64.b64decode(b64_byte_data)
 
 
 def convert_to_simplified(text):
@@ -53,60 +114,7 @@ def audio_to_text(audio_file_path):
     return text_simplified
 
 
-def pdf_to_str(pdf_file):
-    """从PDF文件中提取文本内容"""
-    import PyPDF2
-    # PDF解析库   
-    reader = PyPDF2.PdfReader(pdf_file)                                                # 创建PDF读取器
-    text = ""
-    #reader.pages：返回PDF文件的所有页面对象
-    for page in reader.pages:
-        # 遍历每一页 extract_text()方法从当前页面提取文本内容
-        #page.extract_text()：从当前页面提取文本内容
-        text += page.extract_text()                                                    # 提取文本
-    return text
-
-
-def docx_to_str(file_path):
-    """从DOCX文件中提取文本内容"""
-    from docx import Document                                                             # DOCX文档处理
-    doc = Document(file_path)                                                          # 打开DOCX文档
-    text = []
-    for paragraph in doc.paragraphs:                                                   # 遍历每个段落
-        text.append(paragraph.text)                                                     # 收集段落文本
-    return "\n".join(text)                                                             # 拼接为完整文本
-
-
-def text_file_to_str(text_file):
-    """从文本文件中提取内容（自动检测编码）"""
-    # 字符编码检测库
-    import chardet                                                                        
-    with open(text_file, "rb") as file:
-        raw_data = file.read() # 读取原始字节
-        # 检测编码格式  返回一个字典，包含编码类型和置信度信息
-        result = chardet.detect(raw_data)                                               
-        encoding = result["encoding"]
-
-    # 使用检测到的编码读取文件
-    with open(text_file, "r", encoding=encoding) as file:
-        return file.read()
-
-
-def image_to_base64(image_path):
-    import base64  # Base64编码模块，用于图片处理
-
-    """将图片文件转换为Base64编码字符串"""
-    with open(image_path, "rb") as image_file:
-        #base64.b64encode()方法将二进制数据编码为Base64字符串
-        #就是将二进制字节转换成base64格式的字节
-        # .decode()方法将Base64字节通过UTF-8编码转换成Base64字符串
-        encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
-        return encoded_string
-# # 传入的是网络收到的 Base64 字符串
-# # 第一步先 encode 转回 Base64 字节
-# b64_byte_data = base64_str.encode("utf-8")
-# # 第二步 b64decode 把 Base64 字节还原成图片原始二进制
-# origin_image_bytes = base64.b64decode(b64_byte_data)
+# ============ 核心处理：文本模式 ============
 
 # 核心函数：文本模式下处理用户输入
 def grodio_view(chatbot, chat_input):
@@ -164,7 +172,7 @@ def grodio_view(chatbot, chat_input):
         image_url = None
 
     # 解析问题类型（意图识别）
-    question_type = parse_question(user_message, image_url)
+    question_type = detect_intent(user_message, image_url)
     from icecream import ic #ic自动打印变量值 
 # file_path = "报告.pdf"   ic(file_path)   输出：ic| test.py:12 - file_path: '报告.pdf'
 
@@ -201,15 +209,14 @@ def grodio_view(chatbot, chat_input):
 
     if user_message == "":
         user_message = "请你将下面的句子修饰后输出，不要包含额外的文字，句子:'请问您有什么想了解的，我将尽力为您服务'"
-    answer = get_answer(user_message, chatbot, question_type, image_url)
+    answer = fetch_answer(user_message, chatbot, question_type, image_url)
     #chatbot格式：[用户消息, 机器人消息]
     bot_response = ""
 
-    # 处理文本生成/其他/文档检索/知识图谱检索
+    # 处理文本生成/其他/文档检索
     if (
-        answer[1] == userPurposeType.text
-        or answer[1] == userPurposeType.RAG
-        or answer[1] == userPurposeType.KnowledgeGraph
+        answer[1] == intent_type.text
+        or answer[1] == intent_type.rag
     ):
         # 流式输出   response[大模型返回的对象1，大模型返回的对象2]
         #         chunk = {
@@ -235,11 +242,11 @@ def grodio_view(chatbot, chat_input):
             yield chatbot
 
     # 处理图片生成
-    if answer[1] == userPurposeType.ImageGeneration:
+    if answer[1] == intent_type.image_gen:
         image_url = answer[0]
-        describe = process_image_describe_tool(
-            question_type=userPurposeType.ImageDescribe,
-            question="描述这个图片，不要识别‘AI生成’",
+        describe = handle_image_desc(
+            question_type=intent_type.image_desc,
+            question="描述这个图片，不要识别'AI生成'",
             history="",
             image_url=[image_url],
         )
@@ -253,9 +260,9 @@ def grodio_view(chatbot, chat_input):
         yield chatbot
 
     # 处理图片生成
-    if answer[1] == userPurposeType.ImageGeneration:
-        generation=process_images_tool(
-            question_type=userPurposeType.ImageGeneration,
+    if answer[1] == intent_type.image_gen:
+        generation=handle_image_gen(
+            question_type=intent_type.image_gen,
             question="请生成一张金毛和波斯猫打架的图片",
             history="",
             image_url=[],
@@ -269,7 +276,7 @@ def grodio_view(chatbot, chat_input):
         #     yield chatbot  # 实时输出当前累积的对话内容
 
     # 处理视频
-    if answer[1] == userPurposeType.Video:
+    if answer[1] == intent_type.video:
         if answer[0] is not None:
             chatbot[-1][1] = answer[0][0]
         else:
@@ -277,7 +284,7 @@ def grodio_view(chatbot, chat_input):
         yield chatbot
 
     # 处理PPT
-    if answer[1] == userPurposeType.PPT:
+    if answer[1] == intent_type.ppt:
         if answer[0] is not None:
             chatbot[-1][1] = answer[0][0]
         else:
@@ -285,7 +292,7 @@ def grodio_view(chatbot, chat_input):
         yield chatbot
 
     # 处理Docx
-    if answer[1] == userPurposeType.Docx:
+    if answer[1] == intent_type.docx:
         if answer[0] is not None:
             chatbot[-1][1] = answer[0][0]
         else:
@@ -293,7 +300,7 @@ def grodio_view(chatbot, chat_input):
         yield chatbot
 
     # 处理音频生成
-    if answer[1] == userPurposeType.Audio:
+    if answer[1] == intent_type.audio:
         if answer[0] is not None:
             chatbot[-1][1] = answer[0][0]
         else:
@@ -301,7 +308,7 @@ def grodio_view(chatbot, chat_input):
         yield chatbot
 
     # 处理联网搜索
-    if answer[1] == userPurposeType.InternetSearch:
+    if answer[1] == intent_type.web_search:
         if answer[3] == False:
             output_message = (
                 "由于网络问题，访问互联网失败，下面由我根据现有知识给出回答："
@@ -333,6 +340,8 @@ def grodio_view(chatbot, chat_input):
             chatbot[-1][1] = bot_response
             yield chatbot
 
+
+# ============ 核心处理：语音模式 ============
 
 # 语音模式下处理用户输入
 def gradio_audio_view(chatbot, audio_input):
@@ -370,16 +379,15 @@ def gradio_audio_view(chatbot, audio_input):
         user_message = "请你将下面的句子修饰后输出，不要包含额外的文字，句子:'请问您有什么想了解的，我将尽力为您服务'"
 
     # 解析问题类型
-    question_type = parse_question(user_message)
+    question_type = detect_intent(user_message)
     ic(question_type)
-    answer = get_answer(user_message, chatbot, question_type)
+    answer = fetch_answer(user_message, chatbot, question_type)
     bot_response = ""
 
-    # 处理文本生成/其他/文档检索/知识图谱检索（语音输出）
+    # 处理文本生成/其他/文档检索（语音输出）
     if (
-        answer[1] == userPurposeType.text
-        or answer[1] == userPurposeType.RAG
-        or answer[1] == userPurposeType.KnowledgeGraph
+        answer[1] == intent_type.text
+        or answer[1] == intent_type.rag
     ):
         # 先收集完整文本
         for chunk in answer[0]:
@@ -389,7 +397,7 @@ def gradio_audio_view(chatbot, audio_input):
         # 尝试转换为语音输出
         try:
             chatbot[-1][1] = (
-                audio_generate(
+                synthesize(
                     text=bot_response,
                     model_name="zh-CN-YunxiNeural",                                     # 云希中文女声
                 ),
@@ -402,11 +410,11 @@ def gradio_audio_view(chatbot, audio_input):
         yield chatbot
 
     # 处理图片生成（语音模式下也显示图片）
-    if answer[1] == userPurposeType.ImageGeneration:
+    if answer[1] == intent_type.image_gen:
         image_url = answer[0]
-        describe = process_image_describe_tool(
-            question_type=userPurposeType.ImageDescribe,
-            question="描述这个图片，不要识别‘AI生成’",
+        describe = handle_image_desc(
+            question_type=intent_type.image_desc,
+            question="描述这个图片，不要识别'AI生成'",
             history=" ",
             image_url=[image_url],
         )
@@ -419,13 +427,13 @@ def gradio_audio_view(chatbot, audio_input):
         yield chatbot
 
     # 处理视频生成失败（语音提示）
-    if answer[1] == userPurposeType.Video:
+    if answer[1] == intent_type.video:
         if answer[0] is not None:
             chatbot[-1][1] = answer[0]
         else:
             try:
                 chatbot[-1][1] = (
-                    audio_generate(
+                    synthesize(
                         text="抱歉，视频生成失败，请稍后再试",
                         model_name="zh-CN-YunxiNeural",
                     ),
@@ -436,13 +444,13 @@ def gradio_audio_view(chatbot, audio_input):
         yield chatbot
 
     # 处理PPT生成失败（语音提示）
-    if answer[1] == userPurposeType.PPT:
+    if answer[1] == intent_type.ppt:
         if answer[0] is not None:
             chatbot[-1][1] = answer[0]
         else:
             try:
                 chatbot[-1][1] = (
-                    audio_generate(
+                    synthesize(
                         text="抱歉，PPT生成失败，请稍后再试",
                         model_name="zh-CN-YunxiNeural",
                     ),
@@ -453,13 +461,13 @@ def gradio_audio_view(chatbot, audio_input):
         yield chatbot
 
     # 处理Docx生成失败（语音提示）
-    if answer[1] == userPurposeType.Docx:
+    if answer[1] == intent_type.docx:
         if answer[0] is not None:
             chatbot[-1][1] = answer[0]
         else:
             try:
                 chatbot[-1][1] = (
-                    audio_generate(
+                    synthesize(
                         text="抱歉，文档生成失败，请稍后再试",
                         model_name="zh-CN-YunxiNeural",
                     ),
@@ -470,13 +478,13 @@ def gradio_audio_view(chatbot, audio_input):
         yield chatbot
 
     # 处理音频生成失败（语音提示）
-    if answer[1] == userPurposeType.Audio:
+    if answer[1] == intent_type.audio:
         if answer[0] is not None:
             chatbot[-1][1] = answer[0]
         else:
             try:
                 chatbot[-1][1] = (
-                    audio_generate(
+                    synthesize(
                         text="抱歉，音频生成失败，请稍后再试",
                         model_name="zh-CN-YunxiNeural",
                     ),
@@ -487,7 +495,7 @@ def gradio_audio_view(chatbot, audio_input):
         yield chatbot
 
     # 处理联网搜索（语音输出）
-    if answer[1] == userPurposeType.InternetSearch:
+    if answer[1] == intent_type.web_search:
         if answer[3] == False:
             bot_response = (
                 "由于网络问题，访问互联网失败，下面由我根据现有知识给出回答："
@@ -500,7 +508,7 @@ def gradio_audio_view(chatbot, audio_input):
         # 转换为语音
         try:
             chatbot[-1][1] = (
-                audio_generate(
+                synthesize(
                     text=bot_response,
                     model_name="zh-CN-YunxiNeural",
                 ),
@@ -511,6 +519,8 @@ def gradio_audio_view(chatbot, audio_input):
             chatbot[-1][1] = bot_response
         yield chatbot
 
+
+# ============ UI 模式切换 ============
 
 import gradio as gr
 # 切换到语音模式的函数
@@ -536,6 +546,8 @@ def toggle_text_mode():
     )
 
 
+# ============ 示例 & 界面构建 ============
+
 # 示例问题列表（供用户快速选择）
 examples = [
     {"text": "您好", "files": []},
@@ -552,7 +564,6 @@ examples = [
     {"text": "我最近想打太极养生，帮我生成一段老人打太极的视频吧", "files": []},
     {"text": "根据我的病历，给我一个合理的治疗方案", "files": []},
     {"text": "根据知识库介绍一下常见疾病", "files": []},
-    {"text": "根据知识图谱告诉我糖尿病人适合吃的食物有哪些？", "files": []},
 ]
 
 

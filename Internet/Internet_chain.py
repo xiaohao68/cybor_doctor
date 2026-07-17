@@ -1,7 +1,7 @@
-from Internet.Internet_prompt import extract_question
-from Internet.retrieve_Internet import retrieve_html
-from client.clientfactory import Clientfactory
-from env import get_app_root
+from Internet.Internet_prompt import extract_keywords
+from Internet.retrieve_Internet import fetch_web_docs
+from client.clientfactory import client_broker
+from env import app_root
 
 import re
 import os
@@ -14,57 +14,10 @@ from typing import List
 
 
 
-_SAVE_PATH = os.path.join(get_app_root(), "data/cache/internet")
+web_cache_dir = os.path.join(app_root(), "data/cache/internet")
 
-#InternetSearchChain-互联网搜索链
-def InternetSearchChain(question, history):
-    if os.path.exists(_SAVE_PATH):
-        shutil.rmtree(_SAVE_PATH)
 
-    if not os.path.exists(_SAVE_PATH):
-        os.makedirs(_SAVE_PATH)
-#whole_question-用户提问，包含多个问题
-    whole_question = extract_question(question, history)
-    question_list = re.split(r"[;；]", whole_question)
-#urllib3-用于处理HTTP请求和响应  disable_warnings()方法用于忽略不安全的临时请求警告
-#InsecureRequestWarning-用于忽略不安全的请求警告(request默认会验证服务器的SSL证书错误)
-    import requests
-    from urllib3.exceptions import InsecureRequestWarning
-#requests.packages表示requests库的urllib3模块，用于处理HTTP请求和响应
-    requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-
-    threads = []
-
-    #links-用于存储搜索到的链接信息，键是问题，值是链接列表
-    links = {}
-
-    # 为每个问题创建单独的线程 用多线程同时搜索
-    for question in question_list:
-#target表示 线程要执行的函数  args表示要传给函数的参数元组 links-用于存储搜索到的链接信息
-        #用必应搜索
-        thread = threading.Thread(target=search_bing, args=(question, links, 3))
-        threads.append(thread)
-        thread.start()#启动线程
-        #用百度搜索
-        thread = threading.Thread(target=search_baidu, args=(question, links, 3))
-        threads.append(thread)
-        thread.start()#启动线程
-
-    # 等待所有线程完成，再合并所有搜索到的链接信息
-    for thread in threads:
-        thread.join()
-
-    if has_html_files(_SAVE_PATH):
-        docs, _context = retrieve_html(question)
-        prompt = f"根据你现有的知识，辅助以搜索到的文件资料：\n{_context}\n 回答问题：\n{question}\n 尽可能多的覆盖到文件资料"
-    else:
-        prompt = question
-
-    response = Clientfactory().get_client().chat_with_ai_stream(prompt)
-
-    return response, links, has_html_files(_SAVE_PATH)
-
-def has_html_files(directory_path):
+def contains_html(directory_path):
     if os.path.exists(directory_path):
         # 遍历目录中的文件
         for file_name in os.listdir(directory_path):
@@ -75,7 +28,7 @@ def has_html_files(directory_path):
         return False
 
 
-def search_bing(query, links, num_results=3):
+def bing_search(query, links, num_results=3):
 
     headers = {
         #Accept-服务器返回的文件类型 text/html,application/xhtml+xml,application/xml表示HTML、XML、XML文档等
@@ -121,7 +74,7 @@ def search_bing(query, links, num_results=3):
                 try:
                     response = requests.get(link, timeout=10)
                     if response.status_code == 200:
-                        filename = f"{_SAVE_PATH}/{title}.html"
+                        filename = f"{web_cache_dir}/{title}.html"
                 #response.text-服务器返回的HTML文档内容，比如<html>
                         # │  <body>
                         # │      <ul>
@@ -152,7 +105,7 @@ def search_bing(query, links, num_results=3):
             print("Error: ", response.status_code)
 
 
-def search_baidu(query, links, num_results=3):
+def baidu_search(query, links, num_results=3):
     headers = {
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Encoding": "gzip, deflate, compress",
@@ -181,7 +134,7 @@ def search_baidu(query, links, num_results=3):
                 response = requests.get(link, timeout=10)
 
                 if response.status_code == 200:
-                    filename = f"{_SAVE_PATH}/{title}.html"
+                    filename = f"{web_cache_dir}/{title}.html"
                     if response.text is not None:
                         with open(filename, "w", encoding="utf-8") as f:
                             links[link] = title
@@ -202,3 +155,52 @@ def search_baidu(query, links, num_results=3):
             print("访问百度失败，请检查网络代理制")
     else:
         print("Error: ", response.status_code)
+
+
+#run_web_search-互联网搜索链
+def run_web_search(question, history):
+    if os.path.exists(web_cache_dir):
+        shutil.rmtree(web_cache_dir)
+
+    if not os.path.exists(web_cache_dir):
+        os.makedirs(web_cache_dir)
+#whole_question-用户提问，包含多个问题
+    whole_question = extract_keywords(question, history)
+    question_list = re.split(r"[;；]", whole_question)
+#urllib3-用于处理HTTP请求和响应  disable_warnings()方法用于忽略不安全的临时请求警告
+#InsecureRequestWarning-用于忽略不安全的请求警告(request默认会验证服务器的SSL证书错误)
+    import requests
+    from urllib3.exceptions import InsecureRequestWarning
+#requests.packages表示requests库的urllib3模块，用于处理HTTP请求和响应
+    requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+    threads = []
+
+    #links-用于存储搜索到的链接信息，键是问题，值是链接列表
+    links = {}
+
+    # 为每个问题创建单独的线程 用多线程同时搜索
+    for question in question_list:
+#target表示 线程要执行的函数  args表示要传给函数的参数元组 links-用于存储搜索到的链接信息
+        #用必应搜索
+        thread = threading.Thread(target=bing_search, args=(question, links, 3))
+        threads.append(thread)
+        thread.start()#启动线程
+        #用百度搜索
+        thread = threading.Thread(target=baidu_search, args=(question, links, 3))
+        threads.append(thread)
+        thread.start()#启动线程
+
+    # 等待所有线程完成，再合并所有搜索到的链接信息
+    for thread in threads:
+        thread.join()
+
+    if contains_html(web_cache_dir):
+        docs, _context = fetch_web_docs(question)
+        prompt = f"根据你现有的知识，辅助以搜索到的文件资料：\n{_context}\n 回答问题：\n{question}\n 尽可能多的覆盖到文件资料"
+    else:
+        prompt = question
+
+    response = client_broker().get_default().ask_model_stream(prompt)
+
+    return response, links, contains_html(web_cache_dir)

@@ -8,25 +8,25 @@ import time
 #qn函数用于创建命名空间的QName对象
 from pptx.oxml.ns import qn
 from typing import Dict
-from env import get_app_root
+from env import app_root
 
 
 
-_OUTPUT_DIR = os.path.join(get_app_root(), "data/cache/ppt")
+ppt_cache_dir = os.path.join(app_root(), "data/cache/ppt")
 
 # 如果文件夹路径不存在，先创建
-if not os.path.exists(_OUTPUT_DIR):
-    os.makedirs(_OUTPUT_DIR)
+if not os.path.exists(ppt_cache_dir):
+    os.makedirs(ppt_cache_dir)
 
-def get_file_path(text):
+def make_path(text):
     """生成唯一的文件路径"""
     #haslib.sha256()函数用于生成sha256哈希值，返回一个sha256对象,只能处理字节类型数据
     #hexdigest()方法用于将sha256对象转换为十六进制字符串
     #encode("utf-8")将字符串编码为utf-8字节类型数据 decode("utf-8")将字节类型数据解码为字符串
     file_name = hashlib.sha256(text.encode("utf-8")).hexdigest()  ## 也可以使用uuid
-    return os.path.join(_OUTPUT_DIR, f"{file_name}.pptx")
+    return os.path.join(ppt_cache_dir, f"{file_name}.pptx")
 
-def generate(ppt_content: Dict) -> str:
+def render_ppt(ppt_content: Dict) -> str:
     """生成 ppt 文件"""
     #Presentation类用于创建ppt文件，打开已有PPT，添加幻灯片，保存ppt
     from pptx import Presentation
@@ -72,10 +72,9 @@ def generate(ppt_content: Dict) -> str:
             sub_description = text_frame.add_paragraph()
             sub_description.text, sub_description.level = sub_content["description"], 3
             
-    _output_file = get_file_path(str(time.time()))
+    _output_file = make_path(str(time.time()))
     #save()方法用于保存ppt文件，参数为保存路径，返回值为None
     #_output_file为保存路径，格式为pptx
     ppt.save(_output_file)
 
     return _output_file
-

@@ -4,79 +4,24 @@ from typing import List, Dict                                     # 类型提示
 from openai.types.chat import ChatCompletion, ChatCompletionChunk  # OpenAI类型
 from openai import Stream                                          # 流式响应类型
 
-from client.LLMclientbase import LLMclientbase                      # 基础客户端类
+from client.LLMclientbase import llm_client_base                    # 基础客户端类
 from overrides import override                                      # 方法重写装饰器
 
 
-class LLMclientgeneric(LLMclientbase):
+class llm_client_impl(llm_client_base):
     """
     LLM客户端通用实现
     
-    继承自LLMclientbase，实现具体的API调用方法
+    继承自llm_client_base，实现具体的API调用方法
     """
 
     def __init__(self, *args, **kwargs):
         """初始化客户端，调用父类构造函数"""
         super().__init__()
 
-    # 单轮对话函数（不支持流式输出，无历史输入）
-    @override  #@override是一个装饰器，用于标记方法为重写，确保子类实现该方法
-    def chat_with_ai(self, prompt: str) -> str | None:
-        """
-        单轮对话接口
-        
-        用于简单的一次性问答，不支持对话历史和流式输出
-        
-        参数:
-            prompt: 用户输入的提示词
-        
-        返回:
-            str | None: LLM的回答文本，失败返回None
-        """
-        response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "user", "content": prompt},
-            ],
-            top_p=0.7,                                            # 核采样参数
-            temperature=0.95,                                      # 温度参数（控制随机性）
-            max_tokens=1024,                                       # 最大生成token数
-        )
-        return response.choices[0].message.content
-
-    # 流式对话函数（支持流式输出和历史记录）
-    @override
-    def chat_with_ai_stream(
-        self, prompt: str, history: List[List[str]] | None = None
-    ) -> ChatCompletion | Stream[ChatCompletionChunk]:
-    #ChatCompletionChunk是一个OpenAI的类型，用于表示流式响应的每个部分
-    #ChatCompletion是一个OpenAI的类型，用于表示完整的对话响应
-    #Stream是一个OpenAI的类型，用于表示流式响应,是一个生成器对象，每次迭代返回一个ChatCompletionChunk对象
-        """
-        流式对话接口（主要功能函数）
-        
-        支持流式输出和对话历史，是系统的主要对话接口
-        
-        参数:
-            prompt: 当前用户输入
-            history: 对话历史记录（列表形式）
-        
-        返回:
-            Stream[ChatCompletionChunk]: 流式响应对象
-        """
-        response = self.client.chat.completions.create(
-            model=self.model_name,
-            messages=self.construct_message(prompt, history if history else []),
-            top_p=0.7,
-            temperature=0.95,
-            max_tokens=1024,
-            stream=True,                                          # 启用流式输出
-        )
-        return response
-
     # 消息构造函数（提示词工程）
     @override
-    def construct_message(
+    def build_messages(
         self, prompt: str, history: List[List[str]] | None = None
     ) -> List[Dict[str, str]] | str | None:
         """
@@ -110,7 +55,7 @@ class LLMclientgeneric(LLMclientbase):
 
     # 直接消息对话函数（用于PPT/Word生成）
     @override
-    def chat_using_messages(self, messages: List[Dict]) -> str | None:
+    def chat_messages(self, messages: List[Dict]) -> str | None:
         """
         直接消息对话接口
         
@@ -131,3 +76,58 @@ class LLMclientgeneric(LLMclientbase):
         )
 
         return response.choices[0].message.content
+
+    # 单轮对话函数（不支持流式输出，无历史输入）
+    @override  #@override是一个装饰器，用于标记方法为重写，确保子类实现该方法
+    def ask_model(self, prompt: str) -> str | None:
+        """
+        单轮对话接口
+        
+        用于简单的一次性问答，不支持对话历史和流式输出
+        
+        参数:
+            prompt: 用户输入的提示词
+        
+        返回:
+            str | None: LLM的回答文本，失败返回None
+        """
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "user", "content": prompt},
+            ],
+            top_p=0.7,                                            # 核采样参数
+            temperature=0.95,                                      # 温度参数（控制随机性）
+            max_tokens=1024,                                       # 最大生成token数
+        )
+        return response.choices[0].message.content
+
+    # 流式对话函数（支持流式输出和历史记录）
+    @override
+    def ask_model_stream(
+        self, prompt: str, history: List[List[str]] | None = None
+    ) -> ChatCompletion | Stream[ChatCompletionChunk]:
+    #ChatCompletionChunk是一个OpenAI的类型，用于表示流式响应的每个部分
+    #ChatCompletion是一个OpenAI的类型，用于表示完整的对话响应
+    #Stream是一个OpenAI的类型，用于表示流式响应,是一个生成器对象，每次迭代返回一个ChatCompletionChunk对象
+        """
+        流式对话接口（主要功能函数）
+        
+        支持流式输出和对话历史，是系统的主要对话接口
+        
+        参数:
+            prompt: 当前用户输入
+            history: 对话历史记录（列表形式）
+        
+        返回:
+            Stream[ChatCompletionChunk]: 流式响应对象
+        """
+        response = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=self.build_messages(prompt, history if history else []),
+            top_p=0.7,
+            temperature=0.95,
+            max_tokens=1024,
+            stream=True,                                          # 启用流式输出
+        )
+        return response

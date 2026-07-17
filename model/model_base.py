@@ -2,24 +2,13 @@
 from enum import Enum
 
 
-class ModelStatus(str, Enum):
-    
-    INITIAL = "initial"
-    BUILDING = "building"
-    READY = "ready"
-    FAILED = "failed"
-    INVALID = "invalid"
-    DELETED = "deleted"
-    UNKNOWN = "unknown"
-
-
-class Modelbase(object):
+class base_model(object):
     def __init__(self, id=None, *args, **kwargs):
-        self._model_status = ModelStatus.FAILED
+        self._model_status = model_state.failed
         self._user_id = id 
     
     @property
-    def model_status(self):
+    def status(self):
         return self._model_status
     
     @property
@@ -27,5 +16,16 @@ class Modelbase(object):
         return self._user_id
     
     # 新增修改 user_id 的函数
-    def set_user_id(self, new_id):
+    def set_user(self, new_id):
         self._user_id = new_id
+
+
+class model_state(str, Enum):
+    
+    initial = "initial"
+    building = "building"
+    ready = "ready"
+    failed = "failed"
+    invalid = "invalid"
+    deleted = "deleted"
+    unknown = "unknown"

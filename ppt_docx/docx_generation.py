@@ -5,20 +5,20 @@ import hashlib
 import time
 
 from typing import Dict
-from env import get_app_root
+from env import app_root
 
-_OUTPUT_DIR_DOCX = os.path.join(get_app_root(), "data/cache/docx")
+docx_cache_dir = os.path.join(app_root(), "data/cache/docx")
 
 # 如果文件夹路径不存在，先创建
-if not os.path.exists(_OUTPUT_DIR_DOCX):
-    os.makedirs(_OUTPUT_DIR_DOCX)
+if not os.path.exists(docx_cache_dir):
+    os.makedirs(docx_cache_dir)
 
-def get_file_path_docx(text):
+def make_path(text):
     """生成唯一的文件路径"""
     file_name = hashlib.sha256(text.encode("utf-8")).hexdigest()  # 可以使用uuid替代
-    return os.path.join(_OUTPUT_DIR_DOCX, f"{file_name}.docx")
+    return os.path.join(docx_cache_dir, f"{file_name}.docx")
 
-def is_chinese(text: str) -> bool:
+def has_chinese(text: str) -> bool:
     """判断文本中是否包含中文字符"""
     return bool(re.search(r'[\u4e00-\u9fff]', text))
 
@@ -27,7 +27,7 @@ from docx.shared import Pt
 #qn函数用于创建XML命名空间的QName对象，解决字体设置问题，确保在不同区域设置字体时，字体能够正常显示
 from docx.oxml.ns import qn 
 
-def generate_docx_content(docx_content: Dict) -> str:
+def render_docx(docx_content: Dict) -> str:
     """生成 docx 文件"""
     #Document类用于创建docx文档对象
     from docx import Document
@@ -44,7 +44,7 @@ def generate_docx_content(docx_content: Dict) -> str:
     title_run = title_heading.runs[0]
     
     # 根据标题是否包含中文设置字体
-    if is_chinese(docx_content['title']):
+    if has_chinese(docx_content['title']):
         #font.name属性用于设置字体名称
         #_element属性用于获取运行对象的XML元素 rPr元素用于设置段落格式 rFonts元素用于设置字体 
         #qn函数用于创建XML命名空间的QName对象 w:eastAsia 表示东亚区域的字体设置
@@ -65,7 +65,7 @@ def generate_docx_content(docx_content: Dict) -> str:
         section_heading_run = section_heading.runs[0]
         
         # 根据章节标题是否包含中文设置字体
-        if is_chinese(section['heading']):
+        if has_chinese(section['heading']):
             section_heading_run.font.name = '宋体'
             section_heading_run._element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
         else:
@@ -78,7 +78,7 @@ def generate_docx_content(docx_content: Dict) -> str:
             para_heading_run = para_heading.runs[0]
             
             # 根据段落标题是否包含中文设置字体
-            if is_chinese(paragraph['heading']):
+            if has_chinese(paragraph['heading']):
                 para_heading_run.font.name = '宋体'
                 para_heading_run._element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
             else:
@@ -92,7 +92,7 @@ def generate_docx_content(docx_content: Dict) -> str:
             p_run = p.runs[0]
             
             # 根据正文内容是否包含中文设置字体
-            if is_chinese(paragraph['content']):
+            if has_chinese(paragraph['content']):
                 p_run.font.name = '宋体'
                 p_run._element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
             else:
@@ -100,8 +100,7 @@ def generate_docx_content(docx_content: Dict) -> str:
             
             p_run.font.size = Pt(12)  # 正文字体大小
 
-    _output_file = get_file_path_docx(str(time.time()))
+    _output_file = make_path(str(time.time()))
     document.save(_output_file)
 
     return _output_file
-
